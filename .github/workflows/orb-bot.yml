@@ -1,0 +1,27 @@
+name: ORB Bot
+
+on:
+  schedule:
+    - cron: '*/15 13-20 * * 1-5'  # Every 15 mins, 1pm-8pm UTC (9am-4pm ET), Mon-Fri
+  workflow_dispatch:  # allows manual trigger
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Run ORB Bot
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python -m core.engine
