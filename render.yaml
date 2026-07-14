@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: orb-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m core.engine
+    envVars:
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
