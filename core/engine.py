@@ -133,6 +133,12 @@ class ORBEngine:
                     log.info(f"Skipping {symbol} - position already open")
                     continue
 
+                # Crypto only goes long — Alpaca doesn't support crypto shorts
+                is_crypto = "/" in symbol
+                if is_crypto and signal["direction"] == "SELL":
+                    log.info(f"Skipping SELL on {symbol} - crypto long only")
+                    continue
+
                 # Place trade
                 order = await self.alpaca.place_order(
                     symbol=symbol,
