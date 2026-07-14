@@ -35,8 +35,8 @@ ET = ZoneInfo("America/New_York")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 
 WATCHLIST = {
-    "crypto": ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "DOGE/USD"],
-    "stocks": ["SPY", "QQQ", "AAPL", "NVDA", "TSLA"],
+    "crypto": ["BTC/USD", "ETH/USD"],
+    "stocks": ["SPY", "QQQ", "IWM", "NVDA", "TSLA", "AMD", "META", "MSFT", "AAPL", "AMZN"],
 }
 
 FIXED_TRADE_SIZE_USD = 1000
