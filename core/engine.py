@@ -83,9 +83,11 @@ class ORBEngine:
 
         all_symbols = WATCHLIST["crypto"] + WATCHLIST["stocks"]
 
-        # During ORB window - just log, don't trade yet
+        now_et = self._now_et()
+
+        # During ORB window (9:30-10:00am ET) - build range, no trading yet
         if self._is_orb_window():
-            log.info(f"Inside ORB window (9:30-10:00am ET) - building opening range")
+            log.info(f"ORB window open (9:30-10:00am ET) - building opening range, no trades yet")
             for symbol in all_symbols:
                 bars = await self.alpaca.get_bars(symbol, timeframe="1Min", limit=30)
                 if bars:
@@ -94,8 +96,13 @@ class ORBEngine:
                     log.info(f"ORB range: {symbol} H={orb_high:.4f} L={orb_low:.4f}")
             return
 
-        # After ORB window - scan for breakouts
-        log.info("Scanning for ORB breakouts...")
+        # Only scan for breakouts after 10:00am ET (after ORB window closes)
+        if now_et.time() < __import__("datetime").time(10, 0):
+            log.info(f"Waiting for ORB window to close - ET: {now_et.strftime('%I:%M %p')}")
+            return
+
+        # Scan for breakouts between 10:00am - 3:45pm ET only
+        log.info(f"Scanning for ORB breakouts - ET: {now_et.strftime('%I:%M %p')}")
         open_positions = await self.alpaca.get_open_positions()
 
         for symbol in all_symbols:
@@ -145,6 +152,7 @@ class ORBEngine:
                     side="buy" if signal["direction"] == "BUY" else "sell",
                     trade_size_usd=FIXED_TRADE_SIZE_USD,
                     entry_price=current_price,
+                    signal=signal,
                 )
 
                 if order:

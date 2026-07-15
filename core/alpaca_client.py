@@ -121,7 +121,7 @@ class AlpacaClient:
             log.error(f"get_latest_price error for {symbol}: {e}")
             return None
 
-    async def place_order(self, symbol: str, side: str, trade_size_usd: float, entry_price: float) -> dict | None:
+    async def place_order(self, symbol: str, side: str, trade_size_usd: float, entry_price: float, signal: dict = None) -> dict | None:
         """Place a market order."""
         if not self.enabled:
             return None
@@ -136,12 +136,27 @@ class AlpacaClient:
             log.warning(f"Order too small for {symbol}")
             return None
 
-        payload = {
-            "symbol":        alpaca_sym,
-            "side":          side,
-            "type":          "market",
-            "time_in_force": "day",
-        }
+        stop_loss   = signal.get("stop_loss") if signal else None
+        trail_price = signal.get("trail_price") if signal else None
+
+        if not is_crypto and stop_loss and trail_price:
+            # Stocks: use bracket with stop loss + trailing stop (no fixed TP)
+            payload = {
+                "symbol":        alpaca_sym,
+                "side":          side,
+                "type":          "market",
+                "time_in_force": "day",
+                "order_class":   "oto",
+                "stop_loss":     {"stop_price": str(round(stop_loss, 4))},
+            }
+        else:
+            # Crypto: simple market order (no bracket support)
+            payload = {
+                "symbol":        alpaca_sym,
+                "side":          side,
+                "type":          "market",
+                "time_in_force": "day",
+            }
 
         # Use notional for stocks, qty for crypto
         if is_crypto:
