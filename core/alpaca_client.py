@@ -51,7 +51,7 @@ class AlpacaClient:
             start     = (now_et - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
             if is_crypto:
-                alpaca_sym = symbol.replace("/", "")  # BTC/USD -> BTCUSD
+                alpaca_sym = symbol  # Keep BTC/USD format for bars endpoint
                 url = f"{DATA_BASE}/v1beta3/crypto/us/bars"
                 params = {
                     "symbols":    alpaca_sym,
@@ -78,8 +78,7 @@ class AlpacaClient:
                     data = await resp.json()
 
             if is_crypto:
-                alpaca_sym = symbol.replace("/", "")
-                bars_raw   = data.get("bars", {}).get(alpaca_sym, [])
+                bars_raw = data.get("bars", {}).get(symbol, data.get("bars", {}).get(symbol.replace("/", ""), []))
             else:
                 bars_raw = data.get("bars", [])
 
