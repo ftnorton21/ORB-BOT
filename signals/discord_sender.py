@@ -25,10 +25,10 @@ class DiscordSender:
         symbol      = signal.get("symbol", "???")
         entry       = signal.get("entry", "—")
         sl          = signal.get("stop_loss", "—")
-        tp          = signal.get("take_profit", "—")
+        trail       = signal.get("trail_price", "—")
         orb_high    = signal.get("orb_high", "—")
         orb_low     = signal.get("orb_low", "—")
-        rr          = signal.get("rr", "—")
+        orb_range   = signal.get("orb_range", "—")
         confidence  = signal.get("confidence", 0)
         reason      = signal.get("reason", "")
         conf_bar    = "█" * round(confidence / 10) + "░" * (10 - round(confidence / 10))
@@ -38,12 +38,12 @@ class DiscordSender:
             "description": reason,
             "color":       COLOURS.get(direction, 0x888888),
             "fields": [
-                {"name": "Entry",          "value": f"`{entry}`",    "inline": True},
-                {"name": "Stop Loss",      "value": f"`{sl}`",       "inline": True},
-                {"name": "Take Profit",    "value": f"`{tp}`",       "inline": True},
-                {"name": "ORB High",       "value": f"`{orb_high}`", "inline": True},
-                {"name": "ORB Low",        "value": f"`{orb_low}`",  "inline": True},
-                {"name": "Risk/Reward",    "value": f"`{rr}`",       "inline": True},
+                {"name": "Entry",          "value": f"`{entry}`",     "inline": True},
+                {"name": "Stop Loss",      "value": f"`{sl}`",        "inline": True},
+                {"name": "Trailing Stop",  "value": f"`{trail}`",     "inline": True},
+                {"name": "ORB High",       "value": f"`{orb_high}`",  "inline": True},
+                {"name": "ORB Low",        "value": f"`{orb_low}`",   "inline": True},
+                {"name": "ORB Range",      "value": f"`{orb_range}`", "inline": True},
                 {"name": "Confidence",     "value": f"{conf_bar} **{confidence}%**", "inline": False},
             ],
             "footer": {"text": f"Finn's ORB Bot • {datetime.now().strftime('%Y-%m-%d %H:%M')} NZST"},
