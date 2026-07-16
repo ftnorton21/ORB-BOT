@@ -147,7 +147,7 @@ class AlpacaClient:
                 "type":          "market",
                 "time_in_force": "day",
                 "order_class":   "oto",
-                "stop_loss":     {"stop_price": str(round(stop_loss, 4))},
+                "stop_loss":     {"stop_price": str(round(stop_loss, 2))},
             }
         else:
             # Crypto: simple market order (no bracket support)
