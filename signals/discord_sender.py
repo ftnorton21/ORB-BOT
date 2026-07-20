@@ -1,5 +1,5 @@
 """
-Discord Signal Sender for ORB Bot
+Discord Signal Sender for Multi-TF ORB Bot
 """
 
 import aiohttp
@@ -25,28 +25,34 @@ class DiscordSender:
         symbol      = signal.get("symbol", "???")
         entry       = signal.get("entry", "—")
         sl          = signal.get("stop_loss", "—")
-        trail       = signal.get("trail_price", "—")
+        tp          = signal.get("take_profit", "—")
         orb_high    = signal.get("orb_high", "—")
         orb_low     = signal.get("orb_low", "—")
-        orb_range   = signal.get("orb_range", "—")
+        ema_20      = signal.get("ema_20", "—")
+        day_high    = signal.get("day_high", "—")
+        day_low     = signal.get("day_low", "—")
+        rr          = signal.get("rr", "—")
         confidence  = signal.get("confidence", 0)
         reason      = signal.get("reason", "")
         conf_bar    = "█" * round(confidence / 10) + "░" * (10 - round(confidence / 10))
 
         embed = {
-            "title":       f"{EMOJIS.get(direction, '⚪')} ORB {direction} — {symbol}",
+            "title":       f"{EMOJIS.get(direction, '⚪')} MULTI-TF ORB {direction} — {symbol}",
             "description": reason,
             "color":       COLOURS.get(direction, 0x888888),
             "fields": [
-                {"name": "Entry",          "value": f"`{entry}`",     "inline": True},
-                {"name": "Stop Loss",      "value": f"`{sl}`",        "inline": True},
-                {"name": "Trailing Stop",  "value": f"`{trail}`",     "inline": True},
-                {"name": "ORB High",       "value": f"`{orb_high}`",  "inline": True},
-                {"name": "ORB Low",        "value": f"`{orb_low}`",   "inline": True},
-                {"name": "ORB Range",      "value": f"`{orb_range}`", "inline": True},
-                {"name": "Confidence",     "value": f"{conf_bar} **{confidence}%**", "inline": False},
+                {"name": "Entry",        "value": f"`{entry}`",    "inline": True},
+                {"name": "Stop Loss",    "value": f"`{sl}`",       "inline": True},
+                {"name": "Target",       "value": f"`{tp}`",       "inline": True},
+                {"name": "ORB High",     "value": f"`{orb_high}`", "inline": True},
+                {"name": "ORB Low",      "value": f"`{orb_low}`",  "inline": True},
+                {"name": "20 EMA",       "value": f"`{ema_20}`",   "inline": True},
+                {"name": "Day High",     "value": f"`{day_high}`", "inline": True},
+                {"name": "Day Low",      "value": f"`{day_low}`",  "inline": True},
+                {"name": "Risk/Reward",  "value": f"`{rr}`",       "inline": True},
+                {"name": "Confidence",   "value": f"{conf_bar} **{confidence}%**", "inline": False},
             ],
-            "footer": {"text": f"Finn's ORB Bot • {datetime.now().strftime('%Y-%m-%d %H:%M')} NZST"},
+            "footer": {"text": f"Finn's Multi-TF ORB Bot • {datetime.now().strftime('%Y-%m-%d %H:%M')} NZST"},
             "timestamp": datetime.utcnow().isoformat()
         }
 

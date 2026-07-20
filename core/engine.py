@@ -1,15 +1,13 @@
 """
-Opening Range Breakout (ORB) Trading Bot
-=========================================
-Designed for GitHub Actions - runs once per trigger then exits.
-GitHub Actions cron triggers every 15 mins during US market hours.
+Multi-Timeframe ORB Bot Engine
+================================
+GitHub Actions runs this every 5 minutes during US market hours.
+Designed to replace the single-timeframe ORB bot.
 
-- Pulls 9:30-10:00am ET opening range from Alpaca for crypto + stocks
-- Fires BUY when price breaks above opening range high
-- Fires SELL when price breaks below opening range low
-- Fixed $1000 per trade, one trade per asset per day
-- Auto-closes all positions at 3:45pm ET
-- Sends signals to Discord
+Flow:
+- 9:30-10:00am ET: Build 30-min opening range
+- 10:00am-3:45pm ET: Scan for 10min breakout + 2min EMA touch entries
+- 3:45pm ET: Close all positions EOD
 """
 
 import asyncio
@@ -20,8 +18,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+from core.orb_strategy import MultiTFORBStrategy
 from core.alpaca_client import AlpacaClient
-from core.orb_strategy import ORBStrategy
 from signals.discord_sender import DiscordSender
 
 logging.basicConfig(
@@ -32,23 +30,25 @@ log = logging.getLogger(__name__)
 
 ET = ZoneInfo("America/New_York")
 
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL  = os.getenv("DISCORD_WEBHOOK_URL", "")
+FIXED_TRADE_SIZE_USD = 1000
+EOD_CLOSE_TIME       = time(15, 45)
 
 WATCHLIST = {
     "crypto": ["BTC/USD", "ETH/USD"],
     "stocks": ["SPY", "QQQ", "IWM", "NVDA", "TSLA", "AMD", "META", "MSFT", "AAPL", "AMZN"],
 }
 
-FIXED_TRADE_SIZE_USD = 1000
-ORB_WINDOW_MINUTES   = 30
-EOD_CLOSE_TIME       = time(15, 45)
-
 
 class ORBEngine:
     def __init__(self):
+        self.strategy = MultiTFORBStrategy()
         self.alpaca   = AlpacaClient()
-        self.strategy = ORBStrategy(orb_minutes=ORB_WINDOW_MINUTES)
         self.discord  = DiscordSender(DISCORD_WEBHOOK_URL)
+
+        # Track breakout direction per symbol once 10min confirms
+        # symbol -> "BUY" or "SELL" or None
+        self.confirmed_breakouts: dict[str, str] = {}
 
     def _now_et(self) -> datetime:
         return datetime.now(ET)
@@ -61,89 +61,105 @@ class ORBEngine:
 
     def _is_orb_window(self) -> bool:
         now = self._now_et()
-        return time(9, 30) <= now.time() <= time(10, 0)
+        return time(9, 30) <= now.time() < time(10, 0)
 
     def _is_eod(self) -> bool:
         return self._now_et().time() >= EOD_CLOSE_TIME
 
     async def run(self):
-        """Run one scan cycle then exit - GitHub Actions handles scheduling."""
+        """Single run cycle — GitHub Actions calls this every 5 minutes."""
         now_et = self._now_et()
-        log.info(f"ORB Bot triggered - ET time: {now_et.strftime('%A %I:%M %p')}")
+        log.info(f"ORB Bot triggered - ET: {now_et.strftime('%A %I:%M %p')}")
 
         if not self._is_market_open():
-            log.info("Market closed - nothing to do")
+            log.info("Market closed — nothing to do")
             return
 
-        # End of day - close all positions
+        # EOD — close everything
         if self._is_eod():
-            log.info("EOD - closing all positions")
+            log.info("EOD — closing all open positions")
             await self._close_all_positions()
             return
 
-        all_symbols = WATCHLIST["crypto"] + WATCHLIST["stocks"]
-
-        now_et = self._now_et()
-
-        # During ORB window (9:30-10:00am ET) - build range, no trading yet
+        # During ORB window — just log the range being built
         if self._is_orb_window():
-            log.info(f"ORB window open (9:30-10:00am ET) - building opening range, no trades yet")
-            for symbol in all_symbols:
-                bars = await self.alpaca.get_bars(symbol, timeframe="1Min", limit=30)
-                if bars:
-                    orb_high = max(b["h"] for b in bars)
-                    orb_low  = min(b["l"] for b in bars)
-                    log.info(f"ORB range: {symbol} H={orb_high:.4f} L={orb_low:.4f}")
+            log.info("Inside 30-min ORB window (9:30-10:00am ET) — building range, no trades")
+            await self._log_opening_ranges()
             return
 
-        # Only scan for breakouts after 10:00am ET (after ORB window closes)
-        if now_et.time() < __import__("datetime").time(10, 0):
-            log.info(f"Waiting for ORB window to close - ET: {now_et.strftime('%I:%M %p')}")
-            return
+        # After 10:00am — scan for entries
+        log.info(f"Scanning for Multi-TF ORB entries...")
+        await self._scan_for_entries()
 
-        # Scan for breakouts between 10:00am - 3:45pm ET only
-        log.info(f"Scanning for ORB breakouts - ET: {now_et.strftime('%I:%M %p')}")
+    async def _log_opening_ranges(self):
+        all_symbols = WATCHLIST["crypto"] + WATCHLIST["stocks"]
+        for symbol in all_symbols:
+            bars = await self.alpaca.get_bars(symbol, timeframe="30Min", limit=1)
+            if bars:
+                log.info(f"ORB range building: {symbol} H={bars[-1]['h']:.4f} L={bars[-1]['l']:.4f}")
+
+    async def _scan_for_entries(self):
+        all_symbols  = WATCHLIST["crypto"] + WATCHLIST["stocks"]
         open_positions = await self.alpaca.get_open_positions()
 
         for symbol in all_symbols:
             try:
-                # Get opening range bars (first 30 mins of today)
-                bars = await self.alpaca.get_bars(symbol, timeframe="1Min", limit=100)
-                if not bars or len(bars) < 5:
+                # Skip if already in position
+                alpaca_sym = symbol.replace("/", "") if "/" in symbol else symbol
+                if symbol in open_positions or alpaca_sym in open_positions:
+                    log.info(f"Skipping {symbol} — position already open")
                     continue
 
-                # First 30 mins = opening range
-                orb_bars = bars[:30] if len(bars) >= 30 else bars
-                orb_high = max(b["h"] for b in orb_bars)
-                orb_low  = min(b["l"] for b in orb_bars)
+                # Get opening range (30 min bars from today's open)
+                bars_30min = await self.alpaca.get_bars(symbol, timeframe="30Min", limit=10)
+                if not bars_30min or len(bars_30min) < 1:
+                    log.warning(f"No 30min bars for {symbol}")
+                    continue
+
+                # First bar = opening range
+                orb_bar  = bars_30min[0]
+                orb_high = orb_bar["h"]
+                orb_low  = orb_bar["l"]
+
+                # Get 10min bars for breakout confirmation
+                bars_10min = await self.alpaca.get_bars(symbol, timeframe="10Min", limit=20)
+                if not bars_10min:
+                    continue
+
+                # Get 2min bars for EMA touch
+                bars_2min = await self.alpaca.get_bars(symbol, timeframe="2Min", limit=60)
+                if not bars_2min:
+                    continue
+
+                # Day high/low for target
+                day_high = max(b["h"] for b in bars_30min)
+                day_low  = min(b["l"] for b in bars_30min)
 
                 # Current price
                 current_price = await self.alpaca.get_latest_price(symbol)
                 if not current_price:
                     continue
 
-                # Check for breakout
-                signal = self.strategy.check_breakout(
+                # Generate signal
+                signal = self.strategy.generate_signal(
                     symbol=symbol,
                     current_price=current_price,
                     orb_high=orb_high,
                     orb_low=orb_low,
+                    bars_10min=bars_10min,
+                    bars_2min=bars_2min,
+                    day_high=day_high,
+                    day_low=day_low,
                 )
 
                 if not signal:
-                    log.info(f"No breakout: {symbol} price={current_price:.4f} ORB={orb_low:.4f}-{orb_high:.4f}")
+                    log.info(f"No entry yet: {symbol} price={current_price:.4f} ORB={orb_low:.4f}-{orb_high:.4f}")
                     continue
 
-                # Check if already in a position for this symbol
-                alpaca_sym = symbol.replace("/", "")
-                if symbol in open_positions or alpaca_sym in open_positions:
-                    log.info(f"Skipping {symbol} - position already open")
-                    continue
-
-                # Crypto only goes long — Alpaca doesn't support crypto shorts
+                # Skip crypto shorts
                 is_crypto = "/" in symbol
                 if is_crypto and signal["direction"] == "SELL":
-                    log.info(f"Skipping SELL on {symbol} - crypto long only")
+                    log.info(f"Skipping SELL on {symbol} — crypto long only")
                     continue
 
                 # Place trade
